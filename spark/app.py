@@ -71,8 +71,39 @@ def render_step1_schema_definition():
 
     with col1:
         st.subheader("Load Existing Schema")
+
+        # Button to load example schema
+        if st.button("📋 Load Example Schema", use_container_width=True):
+            try:
+                # Try to find the example schema file
+                example_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'example_schema.json')
+                if not os.path.exists(example_path):
+                    # Alternative path for direct execution
+                    example_path = os.path.join('examples', 'example_schema.json')
+
+                if os.path.exists(example_path):
+                    loaded_schema = load_schema(example_path)
+                    is_valid, error_msg = validate_schema(loaded_schema)
+
+                    if is_valid:
+                        st.session_state.schema = loaded_schema
+                        # Ensure prompt_description exists in loaded schema
+                        if 'prompt_description' not in st.session_state.schema:
+                            st.session_state.schema['prompt_description'] = ''
+                        st.session_state.loaded_schema_file = 'example_schema'
+                        st.success("Example schema loaded successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"Invalid example schema: {error_msg}")
+                else:
+                    st.error("Example schema file not found")
+            except Exception as e:
+                st.error(f"Error loading example schema: {str(e)}")
+
+        st.divider()
+
         uploaded_schema = st.file_uploader(
-            "Upload schema JSON file",
+            "Or upload your own schema JSON file",
             type=['json'],
             key='schema_upload'
         )
@@ -244,6 +275,29 @@ def render_step2_file_upload():
     For CSV files, ensure columns are named 'Title' and 'Abstract'.
     """)
 
+    # Button to load example data
+    if st.button("📊 Load Example Data", use_container_width=True):
+        try:
+            # Try to find the example CSV file
+            example_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'example_data.csv')
+            if not os.path.exists(example_path):
+                # Alternative path for direct execution
+                example_path = os.path.join('examples', 'example_data.csv')
+
+            if os.path.exists(example_path):
+                with open(example_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                df = parse_csv_file(file_content)
+                st.session_state.uploaded_data = df
+                st.success(f"✓ Example data loaded successfully! Found {len(df)} records.")
+                st.rerun()
+            else:
+                st.error("Example data file not found")
+        except Exception as e:
+            st.error(f"Error loading example data: {str(e)}")
+
+    st.divider()
+
     file_type = st.radio(
         "Select file type",
         ["RIS File", "CSV File"],
@@ -252,13 +306,13 @@ def render_step2_file_upload():
 
     if file_type == "RIS File":
         uploaded_file = st.file_uploader(
-            "Upload RIS file",
+            "Or upload your own RIS file",
             type=['ris', 'txt'],
             key='ris_upload'
         )
     else:
         uploaded_file = st.file_uploader(
-            "Upload CSV file",
+            "Or upload your own CSV file",
             type=['csv'],
             key='csv_upload'
         )
@@ -273,27 +327,28 @@ def render_step2_file_upload():
                 df = parse_csv_file(file_content)
 
             st.session_state.uploaded_data = df
-
             st.success(f"✓ File loaded successfully! Found {len(df)} records.")
-
-            # Show preview
-            st.subheader("Data Preview")
-            st.dataframe(df.head(10), use_container_width=True)
-
-            # Show statistics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Records", len(df))
-            with col2:
-                has_title = df['title'].notna().sum()
-                st.metric("Records with Title", has_title)
-            with col3:
-                has_abstract = df['abstract'].notna().sum()
-                st.metric("Records with Abstract", has_abstract)
 
         except Exception as e:
             st.error(f"Error loading file: {str(e)}")
             st.session_state.uploaded_data = None
+
+    # Show preview and statistics if data is loaded (from file or example)
+    if st.session_state.uploaded_data is not None:
+        st.divider()
+        st.subheader("Data Preview")
+        st.dataframe(st.session_state.uploaded_data.head(10), use_container_width=True)
+
+        # Show statistics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Records", len(st.session_state.uploaded_data))
+        with col2:
+            has_title = st.session_state.uploaded_data['title'].notna().sum()
+            st.metric("Records with Title", has_title)
+        with col3:
+            has_abstract = st.session_state.uploaded_data['abstract'].notna().sum()
+            st.metric("Records with Abstract", has_abstract)
 
 
 def render_step3_api_config():
