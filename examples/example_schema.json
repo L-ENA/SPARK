@@ -1,0 +1,51 @@
+{
+  "context": "Title: Effects of Metformin and Lifestyle Modification on Glycemic Control in Adults with Type 2 Diabetes: A Randomized Controlled Trial\n\nAbstract: This randomized controlled trial evaluated the efficacy of metformin combined with lifestyle modification in improving glycemic control among adults aged 45-65 with newly diagnosed Type 2 Diabetes. A total of 240 participants were randomly assigned to receive either metformin (1000mg twice daily) plus a structured exercise program and dietary counseling, or standard care alone. The primary outcome was change in HbA1c levels from baseline to 6 months. Secondary outcomes included fasting blood glucose, body weight, and quality of life scores. Results showed a significant reduction in HbA1c levels in the intervention group (mean decrease of 1.8%) compared to the control group (mean decrease of 0.5%, p<0.001). The intervention was well-tolerated with minimal adverse events. These findings suggest that combining metformin with lifestyle modification is an effective and safe approach for managing Type 2 Diabetes in middle-aged adults.",
+  "prompt_description": "Extract Disease, Intervention, Population, Outcome, Finding in order of appearance.\nUse exact text for extractions. Do not paraphrase or overlap entities.\nProvide meaningful attributes for each entity to add context.",
+  "entities": [
+    {
+      "name": "Disease",
+      "description": "The medical condition or disease being studied",
+      "examples": [
+        "Type 2 Diabetes"
+      ]
+    },
+    {
+      "name": "Intervention",
+      "description": "The treatment, drug, or procedure being tested or evaluated",
+      "examples": [
+        "metformin",
+        "structured exercise program",
+        "dietary counseling",
+        "standard care"
+      ]
+    },
+    {
+      "name": "Population",
+      "description": "The characteristics of the study population",
+      "examples": [
+        "adults aged 45-65",
+        "newly diagnosed Type 2 Diabetes",
+        "middle-aged adults"
+      ]
+    },
+    {
+      "name": "Outcome",
+      "description": "The measured outcomes or endpoints of the study",
+      "examples": [
+        "HbA1c levels",
+        "fasting blood glucose",
+        "body weight",
+        "quality of life scores"
+      ]
+    },
+    {
+      "name": "Finding",
+      "description": "The main findings or results of the study",
+      "examples": [
+        "significant reduction in HbA1c levels",
+        "well-tolerated with minimal adverse events",
+        "effective and safe approach"
+      ]
+    }
+  ]
+}
