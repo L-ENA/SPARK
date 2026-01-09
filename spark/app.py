@@ -49,6 +49,8 @@ def initialize_session_state():
         st.session_state.model = 'gpt-4o-mini'
     if 'results' not in st.session_state:
         st.session_state.results = None
+    if 'loaded_schema_file' not in st.session_state:
+        st.session_state.loaded_schema_file = None
 
 
 def render_step1_schema_definition():
@@ -72,19 +74,28 @@ def render_step1_schema_definition():
         )
 
         if uploaded_schema is not None:
-            try:
-                schema_content = uploaded_schema.read().decode('utf-8')
-                loaded_schema = json.loads(schema_content)
-                is_valid, error_msg = validate_schema(loaded_schema)
+            # Create unique identifier for the uploaded file
+            file_id = f"{uploaded_schema.name}_{uploaded_schema.size}"
 
-                if is_valid:
-                    st.session_state.schema = loaded_schema
-                    st.success("Schema loaded successfully!")
-                else:
-                    st.error(f"Invalid schema: {error_msg}")
-                uploaded_schema=None
-            except Exception as e:
-                st.error(f"Error loading schema: {str(e)}")
+            # Only process if this is a new/different file
+            if file_id != st.session_state.loaded_schema_file:
+                try:
+                    schema_content = uploaded_schema.read().decode('utf-8')
+                    loaded_schema = json.loads(schema_content)
+                    is_valid, error_msg = validate_schema(loaded_schema)
+
+                    if is_valid:
+                        st.session_state.schema = loaded_schema
+                        # Ensure prompt_description exists in loaded schema
+                        if 'prompt_description' not in st.session_state.schema:
+                            st.session_state.schema['prompt_description'] = ''
+                        st.session_state.loaded_schema_file = file_id
+                        st.success("Schema loaded successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"Invalid schema: {error_msg}")
+                except Exception as e:
+                    st.error(f"Error loading schema: {str(e)}")
 
     with col2:
         st.subheader("Save Current Schema")
