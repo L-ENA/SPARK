@@ -5,6 +5,8 @@ import streamlit as st
 import pandas as pd
 import json
 import textwrap
+import zipfile
+from io import BytesIO
 from typing import Dict, List, Any
 import langextract as lx
 from langextract import extract
@@ -51,6 +53,8 @@ def initialize_session_state():
         st.session_state.results = None
     if 'loaded_schema_file' not in st.session_state:
         st.session_state.loaded_schema_file = None
+    if 'html_visualizations' not in st.session_state:
+        st.session_state.html_visualizations = []
 
 
 def render_step1_schema_definition():
@@ -412,6 +416,316 @@ def render_step4_execution():
             stats_df = pd.DataFrame(stats_data)
             st.dataframe(stats_df, use_container_width=True)
 
+        # Show HTML visualizations download section
+        if st.session_state.html_visualizations:
+            st.divider()
+            st.subheader("Interactive HTML Visualizations")
+            st.markdown("""
+            Download interactive HTML files to view extraction results with clickable entity highlighting.
+            Each file shows the original text with buttons to highlight different entity types.
+            """)
+
+            # Display download buttons in a grid
+            num_files = len(st.session_state.html_visualizations)
+            st.write(f"**{num_files} visualization(s) available**")
+
+            # Show first few files with individual download buttons
+            max_display = 10
+            if num_files <= max_display:
+                # Show all files individually
+                cols = st.columns(min(5, num_files))
+                for i, html_file in enumerate(st.session_state.html_visualizations):
+                    with cols[i % 5]:
+                        st.download_button(
+                            label=f"📄 Record {i + 1}",
+                            data=html_file['content'],
+                            file_name=html_file['filename'],
+                            mime="text/html",
+                            use_container_width=True
+                        )
+            else:
+                # Show first 10 and provide option to download all as zip
+                st.write("Showing first 10 records:")
+                cols = st.columns(5)
+                for i in range(min(10, num_files)):
+                    html_file = st.session_state.html_visualizations[i]
+                    with cols[i % 5]:
+                        st.download_button(
+                            label=f"📄 Record {i + 1}",
+                            data=html_file['content'],
+                            file_name=html_file['filename'],
+                            mime="text/html",
+                            use_container_width=True
+                        )
+
+                # Option to download all as zip
+                st.divider()
+                st.markdown("**Download All Visualizations**")
+
+                # Create zip file in memory
+                zip_buffer = BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for html_file in st.session_state.html_visualizations:
+                        zip_file.writestr(html_file['filename'], html_file['content'])
+
+                st.download_button(
+                    label=f"⬇️ Download All {num_files} HTML Files (ZIP)",
+                    data=zip_buffer.getvalue(),
+                    file_name="extraction_visualizations.zip",
+                    mime="application/zip",
+                    type="primary",
+                    use_container_width=True
+                )
+
+
+def generate_interactive_html(record_number: int, text: str, result: Any, entity_names: List[str]) -> str:
+    """
+    Generate an interactive HTML visualization for extraction results.
+
+    Args:
+        record_number: Sequential number for the record
+        text: Original text that was processed
+        result: AnnotatedDocument result from langextract
+        entity_names: List of entity type names
+
+    Returns:
+        HTML string with interactive visualization
+    """
+    # Define colors for different entity types (cycling through if more entities than colors)
+    colors = [
+        '#FFB6C1', '#87CEEB', '#90EE90', '#FFD700', '#DDA0DD',
+        '#FFA07A', '#98FB98', '#DEB887', '#F0E68C', '#E0BBE4'
+    ]
+
+    # Group extractions by entity class
+    entity_groups = {}
+    for extraction in result.extractions:
+        entity_class = extraction.extraction_class
+        if entity_class not in entity_groups:
+            entity_groups[entity_class] = []
+        entity_groups[entity_class].append({
+            'text': extraction.extraction_text,
+            'start': extraction.char_interval.start_pos,
+            'end': extraction.char_interval.end_pos
+        })
+
+    # Create color mapping for entity types
+    entity_colors = {name: colors[i % len(colors)] for i, name in enumerate(entity_names)}
+
+    # Build JavaScript data structure
+    js_entities = {}
+    for entity_name in entity_names:
+        if entity_name in entity_groups:
+            js_entities[entity_name] = entity_groups[entity_name]
+        else:
+            js_entities[entity_name] = []
+
+    html_template = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extraction Result - Record {record_number}</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        .header {{
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }}
+        .header h1 {{
+            margin: 0;
+            font-size: 24px;
+        }}
+        .controls {{
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .button-group {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }}
+        .entity-button {{
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            background-color: white;
+        }}
+        .entity-button:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }}
+        .entity-button.active {{
+            border-width: 3px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }}
+        .text-container {{
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            line-height: 1.8;
+            font-size: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }}
+        .highlight {{
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }}
+        .stats {{
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .stats-item {{
+            display: inline-block;
+            margin-right: 20px;
+            font-size: 14px;
+        }}
+        .stats-label {{
+            font-weight: bold;
+            color: #2c3e50;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Extraction Results - Record {record_number}</h1>
+    </div>
+
+    <div class="stats">
+        <div class="stats-item">
+            <span class="stats-label">Total Extractions:</span>
+            <span id="total-extractions">{len(result.extractions)}</span>
+        </div>
+        <div class="stats-item">
+            <span class="stats-label">Entity Types:</span>
+            <span>{len([k for k, v in js_entities.items() if v])}</span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <h3 style="margin-top: 0;">Entity Types (Click to Highlight)</h3>
+        <div class="button-group" id="button-group">
+            <!-- Buttons will be added by JavaScript -->
+        </div>
+    </div>
+
+    <div class="text-container" id="text-container">
+        {text}
+    </div>
+
+    <script>
+        const entities = {json.dumps(js_entities)};
+        const colors = {json.dumps(entity_colors)};
+        const originalText = {json.dumps(text)};
+
+        let activeEntity = null;
+
+        function createButtons() {{
+            const buttonGroup = document.getElementById('button-group');
+
+            for (const [entityType, extractions] of Object.entries(entities)) {{
+                if (extractions.length > 0) {{
+                    const button = document.createElement('button');
+                    button.className = 'entity-button';
+                    button.textContent = `${{entityType}} (${{extractions.length}})`;
+                    button.style.backgroundColor = colors[entityType];
+                    button.style.borderColor = colors[entityType];
+                    button.onclick = () => toggleHighlight(entityType, button);
+                    buttonGroup.appendChild(button);
+                }}
+            }}
+        }}
+
+        function toggleHighlight(entityType, button) {{
+            const allButtons = document.querySelectorAll('.entity-button');
+
+            if (activeEntity === entityType) {{
+                // Deactivate
+                activeEntity = null;
+                button.classList.remove('active');
+                showOriginalText();
+            }} else {{
+                // Activate
+                activeEntity = entityType;
+                allButtons.forEach(b => b.classList.remove('active'));
+                button.classList.add('active');
+                highlightEntities(entityType);
+            }}
+        }}
+
+        function showOriginalText() {{
+            document.getElementById('text-container').textContent = originalText;
+        }}
+
+        function highlightEntities(entityType) {{
+            const extractions = entities[entityType];
+            const color = colors[entityType];
+
+            // Sort extractions by start position (descending) to avoid position shift
+            const sortedExtractions = [...extractions].sort((a, b) => b.start - a.start);
+
+            let highlightedText = originalText;
+
+            for (const extraction of sortedExtractions) {{
+                const before = highlightedText.substring(0, extraction.start);
+                const match = highlightedText.substring(extraction.start, extraction.end);
+                const after = highlightedText.substring(extraction.end);
+
+                const highlighted = `<span class="highlight" style="background-color: ${{color}}; border: 2px solid ${{darkenColor(color)}};">${{escapeHtml(match)}}</span>`;
+                highlightedText = before + highlighted + after;
+            }}
+
+            document.getElementById('text-container').innerHTML = highlightedText;
+        }}
+
+        function escapeHtml(text) {{
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }}
+
+        function darkenColor(color) {{
+            // Simple color darkening
+            const hex = color.replace('#', '');
+            const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - 40);
+            const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - 40);
+            const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - 40);
+            return `#${{r.toString(16).padStart(2, '0')}}${{g.toString(16).padStart(2, '0')}}${{b.toString(16).padStart(2, '0')}}`;
+        }}
+
+        // Initialize
+        createButtons();
+    </script>
+</body>
+</html>
+"""
+
+    return html_template
+
 
 def extract_data():
     """Execute the extraction process"""
@@ -454,6 +768,9 @@ def extract_data():
     for entity_name in entity_names:
         df[entity_name] = ''
 
+    # Clear previous HTML visualizations
+    st.session_state.html_visualizations = []
+
     # Progress tracking
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -467,7 +784,7 @@ def extract_data():
         status_text.text(f"Processing record {idx + 1} of {total_records}")
 
         # Prepare text for extraction
-        text = prepare_extraction_text(row)
+        text = prepare_extraction_text(row).encode("utf-8", errors="ignore").decode("utf-8", errors="ignore")
 
         if not text:
             continue
@@ -497,6 +814,18 @@ def extract_data():
                     # Remove duplicates and join with semicolon
                     unique_entities = sorted(set(extracted_texts))
                     df.at[idx, entity_name] = '; '.join(unique_entities)
+
+            # Generate interactive HTML visualization
+            html_content = generate_interactive_html(
+                record_number=idx + 1,
+                text=text,
+                result=result,
+                entity_names=entity_names
+            )
+            st.session_state.html_visualizations.append({
+                'filename': f'{idx + 1}.html',
+                'content': html_content
+            })
 
         except Exception as e:
             st.warning(f"Error processing record {idx + 1}: {str(e)}")
