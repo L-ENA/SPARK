@@ -386,18 +386,41 @@ def render_step4_execution():
         st.subheader("Results Preview")
         st.dataframe(st.session_state.results.head(10), use_container_width=True)
 
-        # Download button
-        csv = st.session_state.results.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Download Results as CSV",
-            data=csv,
-            file_name="extraction_results.csv",
-            mime="text/csv",
-            type="primary",
-            use_container_width=True
-        )
+        # Download buttons
+        cl1, cl2 = st.columns(2)
+        with cl1:
+            csv = st.session_state.results.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Results as CSV",
+                data=csv,
+                file_name="extraction_results.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True
+            )
+        with cl2:
+            # Download HTML visualizations as ZIP
+            if st.session_state.html_visualizations:
+                num_files = len(st.session_state.html_visualizations)
+
+                # Create zip file in memory
+                zip_buffer = BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for html_file in st.session_state.html_visualizations:
+                        zip_file.writestr(html_file['filename'], html_file['content'])
+
+                st.download_button(
+                    label=f"Download Interactive HTML Visualizations ({num_files} files)",
+                    data=zip_buffer.getvalue(),
+                    file_name="extraction_visualizations.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                    type="primary",
+                    help="Download all extraction results as interactive HTML files with clickable entity highlighting"
+                )
 
         # Show extraction statistics
+        st.divider()
         st.subheader("Extraction Statistics")
         entity_names = [e['name'] for e in st.session_state.schema['entities']]
 
@@ -415,67 +438,6 @@ def render_step4_execution():
         if stats_data:
             stats_df = pd.DataFrame(stats_data)
             st.dataframe(stats_df, use_container_width=True)
-
-        # Show HTML visualizations download section
-        if st.session_state.html_visualizations:
-            st.divider()
-            st.subheader("Interactive HTML Visualizations")
-            st.markdown("""
-            Download interactive HTML files to view extraction results with clickable entity highlighting.
-            Each file shows the original text with buttons to highlight different entity types.
-            """)
-
-            # Display download buttons in a grid
-            num_files = len(st.session_state.html_visualizations)
-            st.write(f"**{num_files} visualization(s) available**")
-
-            # Show first few files with individual download buttons
-            max_display = 10
-            if num_files <= max_display:
-                # Show all files individually
-                cols = st.columns(min(5, num_files))
-                for i, html_file in enumerate(st.session_state.html_visualizations):
-                    with cols[i % 5]:
-                        st.download_button(
-                            label=f"📄 Record {i + 1}",
-                            data=html_file['content'],
-                            file_name=html_file['filename'],
-                            mime="text/html",
-                            use_container_width=True
-                        )
-            else:
-                # Show first 10 and provide option to download all as zip
-                st.write("Showing first 10 records:")
-                cols = st.columns(5)
-                for i in range(min(10, num_files)):
-                    html_file = st.session_state.html_visualizations[i]
-                    with cols[i % 5]:
-                        st.download_button(
-                            label=f"📄 Record {i + 1}",
-                            data=html_file['content'],
-                            file_name=html_file['filename'],
-                            mime="text/html",
-                            use_container_width=True
-                        )
-
-                # Option to download all as zip
-                st.divider()
-                st.markdown("**Download All Visualizations**")
-
-                # Create zip file in memory
-                zip_buffer = BytesIO()
-                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                    for html_file in st.session_state.html_visualizations:
-                        zip_file.writestr(html_file['filename'], html_file['content'])
-
-                st.download_button(
-                    label=f"⬇️ Download All {num_files} HTML Files (ZIP)",
-                    data=zip_buffer.getvalue(),
-                    file_name="extraction_visualizations.zip",
-                    mime="application/zip",
-                    type="primary",
-                    use_container_width=True
-                )
 
 
 def generate_interactive_html(record_number: int, text: str, result: Any, entity_names: List[str]) -> str:
